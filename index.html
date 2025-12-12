@@ -1,0 +1,269 @@
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+// 互動排隊遊戲（單檔 React 元件）
+// 使用說明：將此檔放進任一 React 專案（Create React App / Vite 等）即可使用。
+// TailwindCSS 假設已設定；若沒有可改用一般 CSS。
+
+export default function QueueGame() {
+  const [n, setN] = useState(12); // 預設人數
+  const [tiles, setTiles] = useState([]);
+  const [prompt, setPrompt] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [answerInput, setAnswerInput] = useState("");
+  const [message, setMessage] = useState("");
+  const [mode, setMode] = useState("A"); // A: 給某數，問前面有幾個； B: 給前面有幾個，問我是第幾
+
+  useEffect(() => {
+    resetTiles(n);
+  }, [n]);
+
+  function resetTiles(count) {
+    const arr = Array.from({ length: count }, (_, i) => i + 1);
+    setTiles(arr);
+    setSelected(null);
+    setAnswerInput("");
+    setMessage("");
+  }
+
+  function shuffleTiles() {
+    const arr = [...tiles];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    setTiles(arr);
+  }
+
+  // Drag and drop handlers (HTML5)
+  function onDragStart(e, idx) {
+    e.dataTransfer.setData("text/plain", idx);
+  }
+
+  function onDrop(e, idx) {
+    e.preventDefault();
+    const fromIdx = Number(e.dataTransfer.getData("text/plain"));
+    if (isNaN(fromIdx)) return;
+    const newTiles = [...tiles];
+    const [moved] = newTiles.splice(fromIdx, 1);
+    newTiles.splice(idx, 0, moved);
+    setTiles(newTiles);
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+  }
+
+  // 產生題目
+  function generatePrompt() {
+    setMessage("");
+    setSelected(null);
+    setAnswerInput("");
+    if (mode === "A") {
+      // 給某數，問前面有幾個
+      const num = Math.floor(Math.random() * n) + 1;
+      setPrompt({ type: "A", number: num });
+    } else {
+      // 給前面有幾個，問我是第幾
+      const maxFront = n - 1; // 前面最多 n-1
+      const front = Math.floor(Math.random() * (maxFront + 1)); // 0..n-1
+      setPrompt({ type: "B", front });
+    }
+  }
+
+  function checkAnswer() {
+    if (!prompt) {
+      setMessage("請先產生題目。");
+      return;
+    }
+    if (prompt.type === "A") {
+      const correct = prompt.number - 1;
+      // user may click the tile or type answer
+      const userAns = answerInput !== "" ? Number(answerInput) : (selected !== null ? tiles.indexOf(selected) : null);
+      // if selected was tile value, compute its index in natural order
+      if (selected !== null && userAns === null) {
+        // selected is a tile numeric label; we want how many tiles are before that in the current lineup
+      }
+      // Simplify: allow either numeric input or clicking "我知道了" to reveal correct.
+      if (userAns === correct) {
+        setMessage("答對了！前面有 " + correct + " 個。");
+      } else {
+        setMessage("不對喔。正確答案是：前面有 " + correct + " 個。");
+      }
+    } else {
+      // type B
+      const correct = prompt.front + 1;
+      // prefer selection by clicking tile (choose index)
+      if (selected === null && answerInput === "") {
+        setMessage("請直接點選隊伍中你認為是答案的那個位置，或輸入數字後按檢查。\n(例如：前面有 5 個 -> 第 6 個)");
+        return;
+      }
+      let userAns = null;
+      if (selected !== null) {
+        // find position (1-based) of the selected tile in the current lineup
+        const pos = tiles.indexOf(selected) + 1;
+        userAns = pos;
+      } else if (answerInput !== "") {
+        userAns = Number(answerInput);
+      }
+      if (userAns === correct) {
+        setMessage("答對了！你是第 " + correct + " 個。");
+      } else {
+        setMessage("不對喔。正確答案是：第 " + correct + " 個。");
+      }
+    }
+  }
+
+  function handleTileClick(label) {
+    setSelected(label === selected ? null : label);
+    setMessage("");
+    setAnswerInput("");
+  }
+
+  return (
+    <div className="p-4 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mb-3">互動排隊遊戲（1–30）</h1>
+      <p className="mb-4">目標：理解「某數的前面有幾個？」與「前面有幾個，我是第幾？」</p>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="col-span-1 md:col-span-2">
+          <div className="mb-2 flex items-center gap-2">
+            <label className="text-sm">人數（1-30）</label>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={n}
+              onChange={(e) => {
+                const v = Math.max(1, Math.min(30, Number(e.target.value || 1)));
+                setN(v);
+              }}
+              className="w-20 p-1 rounded border"
+            />
+            <button
+              className="px-3 py-1 rounded shadow-sm border text-sm"
+              onClick={() => resetTiles(n)}
+            >
+              重設隊伍
+            </button>
+            <button
+              className="px-3 py-1 rounded shadow-sm border text-sm"
+              onClick={() => shuffleTiles()}
+            >
+              打亂順序
+            </button>
+          </div>
+
+          <div className="bg-white rounded-lg p-3 shadow-sm">
+            <p className="text-sm mb-2">排隊區（拖曳改變順序，點選選擇）：</p>
+            <div className="flex gap-2 overflow-x-auto py-2">
+              {tiles.map((label, idx) => (
+                <motion.div
+                  key={label}
+                  drag={false}
+                  onDragStart={(e) => onDragStart(e, idx)}
+                  onDrop={(e) => onDrop(e, idx)}
+                  onDragOver={onDragOver}
+                  draggable
+                  onClick={() => handleTileClick(label)}
+                  className={`min-w-[56px] h-14 flex items-center justify-center rounded-md border select-none cursor-move
+                    ${selected === label ? "ring-2 ring-offset-2 ring-indigo-300" : ""}`}
+                >
+                  <div className="text-lg font-medium">{label}</div>
+                </motion.div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-600 mt-2">提示：拖曳卡片可改變隊伍順序，畫面左方題目會依照目前隊形出題。</p>
+          </div>
+        </div>
+
+        <div className="col-span-1">
+          <div className="bg-gray-50 p-3 rounded-lg shadow-sm">
+            <h2 className="font-semibold mb-2">題目面板</h2>
+            <div className="flex gap-2 mb-2">
+              <button
+                className={`px-2 py-1 rounded ${mode === "A" ? "bg-indigo-500 text-white" : "border"}`}
+                onClick={() => setMode("A")}
+              >
+                題型 A：給數 → 問前面有幾個
+              </button>
+              <button
+                className={`px-2 py-1 rounded ${mode === "B" ? "bg-indigo-500 text-white" : "border"}`}
+                onClick={() => setMode("B")}
+              >
+                題型 B：給前面 → 問我是第幾
+              </button>
+            </div>
+
+            <div className="mb-2">
+              <button className="px-3 py-1 rounded border mr-2" onClick={generatePrompt}>產生題目</button>
+              <button className="px-3 py-1 rounded border" onClick={() => { setPrompt(null); setMessage(""); setSelected(null); setAnswerInput(""); }}>清除</button>
+            </div>
+
+            <div className="bg-white p-3 rounded border min-h-[120px]">
+              {prompt ? (
+                <div>
+                  {prompt.type === "A" ? (
+                    <div>
+                      <p className="mb-1">題目：請看這個數字 <span className="font-bold">{prompt.number}</span></p>
+                      <p className="text-sm text-gray-600">問題：{prompt.number} 的前面有幾個？</p>
+
+                      <div className="mt-2">
+                        <label className="text-sm mr-2">直接輸入答案：</label>
+                        <input value={answerInput} onChange={(e) => setAnswerInput(e.target.value.replace(/[^0-9]/g, ""))} className="w-20 p-1 rounded border" />
+                        <button className="ml-2 px-2 py-1 rounded border" onClick={checkAnswer}>檢查答案</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="mb-1">題目：前面有 <span className="font-bold">{prompt.front}</span> 個人</p>
+                      <p className="text-sm text-gray-600">問題：請在隊伍中點選你認為是第幾個（或輸入數字）</p>
+
+                      <div className="mt-2">
+                        <label className="text-sm mr-2">或輸入答案：</label>
+                        <input value={answerInput} onChange={(e) => setAnswerInput(e.target.value.replace(/[^0-9]/g, ""))} className="w-20 p-1 rounded border" />
+                        <button className="ml-2 px-2 py-1 rounded border" onClick={checkAnswer}>檢查答案</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">尚未產生題目，請按「產生題目」。</p>
+              )}
+            </div>
+
+            <div className="mt-3">
+              <p className="text-sm">選擇回饋：</p>
+              <div className="mt-1 p-2 bg-white rounded border min-h-[48px]">
+                <p className="whitespace-pre-wrap">{message || "等待作答..."}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-gray-600">
+              使用提示：教師可讓學生排隊（改變 tiles 的順序），然後產生題目，學生直接在隊伍中點選或輸入答案，檢查後給予實體回饋（例如：前面排 5 個，就讓學生站到第 6 個位置）。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 bg-white p-3 rounded shadow-sm">
+        <h3 className="font-semibold mb-2">任務卡（可列印給學生輪流抽）</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="p-2 border rounded">
+            <p>1) 某數是 9，他的前面有幾個？</p>
+          </div>
+          <div className="p-2 border rounded">
+            <p>2) 前面有 4 個，請問你是第幾？</p>
+          </div>
+          <div className="p-2 border rounded">
+            <p>3) 若圖中第 7 個的前面有幾個？（請現場數一數）</p>
+          </div>
+          <div className="p-2 border rounded">
+            <p>4) 指定同學站到第 5 個，觀察前面有幾個是哪些數字</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}
